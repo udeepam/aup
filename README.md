@@ -1,5 +1,5 @@
 # Auxiliary Utility Preservation
-This repository contains PyTorch code for applying the theory from the [Avoiding Side Effects in Complex Environments](https://arxiv.org/abs/2006.06547) paper by Turner et al. to the [OpenAI Procgen Benchmark](https://openai.com/blog/procgen-benchmark/).
+This repository contains PyTorch code for applying the theory from the [Avoiding Side Effects in Complex Environments](https://arxiv.org/abs/2006.06547) and [Conservative Agency via Attainable Utility Preservation](https://arxiv.org/abs/1902.09725) papers by Turner et al. to the [OpenAI Procgen Benchmark](https://openai.com/blog/procgen-benchmark/).
 
 ## Example usage
 To obtain a learned auxiliary Q-function run
