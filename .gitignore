@@ -3,6 +3,15 @@
 .vscode
 .idea
 
+# Directories
+q_aux_dir/
+wandb/
+cluster/
+notebooks/
+
+# Packages
+baselines/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

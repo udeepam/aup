@@ -9,14 +9,14 @@ def get_args(rest_args):
 
     # --- GENERAL ---
     # train parameters
-    base_parser.add_argument('--num_frames_r_aux', type=int, default=12e4,
+    base_parser.add_argument('--num_frames_r_aux', type=int, default=1e5,
                              help='number of frames to train for training the auxiliary reward function R_aux.')
-    base_parser.add_argument('--num_frames_q_aux', type=int, default=12e5,
+    base_parser.add_argument('--num_frames_q_aux', type=int, default=1e6,
                              help='number of frames to train for training the Q-function Q_aux.')
 
     # --- CB-VAE ---
     base_parser.add_argument("--cb_vae_latent_dim", type=int, default=1,
-                             help='The size of the latent dimension.')
+                             help='The size of the latent dimension. We have only implemented the case when latent_dim=1.')
     base_parser.add_argument("--cb_vae_epochs", type=int, default=100,
                              help='Number of epochs to train the CB-VAE.')
     base_parser.add_argument("--cb_vae_batch_size", type=int, default=2048,

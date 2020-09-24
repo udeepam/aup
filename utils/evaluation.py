@@ -13,11 +13,11 @@ def evaluate(eval_envs,
     # put actor-critic into evaluation mode
     actor_critic.eval()
 
-    # initialise buffer for calculating means
+    # initialise buffer for calculating mean episodic rewards
     eval_episode_info_buf = list()
 
     # reset environments
-    obs = reset_envs(eval_envs, device)  # obs.shape = (n_env,C,H,W)
+    obs = reset_envs(eval_envs, device)  # obs.shape = (num_processes,C,H,W)
     obs = obs.to(device)
 
     # collect returns from 10 full episodes

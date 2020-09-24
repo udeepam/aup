@@ -82,7 +82,7 @@ class QModel(nn.Module):
         value = torch.sum(dist.probs*action_value, dim=1).unsqueeze(dim=1)
         return value, action_log_probs, dist_entropy
 
-    def get_action_values(self, inputs):
+    def get_action_value(self, inputs):
         x = self.feature_extractor(inputs)
         action_value = self.critic_linear(x)
         return action_value

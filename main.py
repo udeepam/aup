@@ -7,13 +7,14 @@ import warnings
 import random
 import time
 import datetime
-from collections import deque
+from collections import deque, defaultdict
+import math
 
 import torch
 
 import wandb
 
-from configs import args_ppo
+from configs import args_ppo, args_ppo_aup
 
 from models.policy import ACModel
 from algorithms.ppo import PPO
@@ -39,7 +40,7 @@ def main():
     parser.add_argument('--env_name', type=str, default='coinrun',
                         help='name of the environment to train on.')
     parser.add_argument('--model', type=str, default='ppo',
-                        help='the model to use for training. {ppo, ibac, ibac_sni, dist_match}')
+                        help='the model to use for training. {ppo, ppo_aup}')
     args, rest_args = parser.parse_known_args()
     env_name = args.env_name
     model = args.model
@@ -48,6 +49,8 @@ def main():
 
     if model == 'ppo':
         args = args_ppo.get_args(rest_args)
+    elif model == 'ppo_aup':
+        args = args_ppo_aup.get_args(rest_args)
     else:
         raise NotImplementedError
 
@@ -66,7 +69,7 @@ def main():
                                'policy_num_steps < env._max_episode_steps.')
 
     # --- TRAINING ---
-    print("Setting up Wandb logging")
+    print("Setting up wandb logging.")
 
     # Weights & Biases logger
     if args.run_name is None:
@@ -89,7 +92,7 @@ def main():
     # set random seed of random, torch and numpy
     utl.set_global_seed(args.seed, args.deterministic_execution)
 
-    print("Setting up Environments")
+    print("Setting up Environments.")
     # initialise environments for training
     train_envs = make_vec_envs(env_name=args.env_name,
                                start_level=args.train_start_level,
@@ -110,7 +113,7 @@ def main():
                               device=device)
     _ = eval_envs.reset()
 
-    print("Setting up Actor-Critic model and Training algorithm")
+    print("Setting up Actor-Critic model and Training algorithm.")
     # initialise policy network
     actor_critic = ACModel(obs_shape=train_envs.observation_space.shape,
                            action_space=train_envs.action_space,
@@ -130,39 +133,43 @@ def main():
     else:
         raise NotImplementedError
 
-    # initialise rollout storage for the policy
+    # initialise rollout storage for the policy training algorithm
     rollouts = RolloutStorage(num_steps=args.policy_num_steps,
                               num_processes=args.num_processes,
                               obs_shape=train_envs.observation_space.shape,
                               action_space=train_envs.action_space)
 
-    # initialise Q_aux function for AUP
+    # initialise Q_aux function(s) for AUP
     if args.use_aup:
+        print("Initialising Q_aux models.")
         q_aux = [QModel(obs_shape=train_envs.observation_space.shape,
                         action_space=train_envs.action_space,
                         hidden_size=args.hidden_size).to(device) for _ in range(args.num_q_aux)]
         if args.num_q_aux==1:
-            model.load_state_dict(torch.load(args.q_aux_dir))
-            model.eval()
+            # load weights to model
+            path = args.q_aux_dir+"0.pt"
+            q_aux[0].load_state_dict(torch.load(path))
+            q_aux[0].eval()
         else:
             # get max number of q_aux functions to choose from
-            max_num_q_aux = 0
-            q_aux_models = np.arange(0, max_num_q_aux)
-            for model in q_aux:
-                path = args.q_aux_dir + random.randint(0, args.max_num_q_aux)
+            args.max_num_q_aux = os.listdir(args.q_aux_dir)
+            q_aux_models = random.sample(list(range(0, args.max_num_q_aux)), args.num_q_aux)
+            # load weights to models
+            for i, model in enumerate(q_aux):
+                path = args.q_aux_dir+str(q_aux_models[i])+".pt"
                 model.load_state_dict(torch.load(path))
                 model.eval()
 
     # count number of frames and updates
-    frames   = 0
+    frames = 0
     iter_idx = 0
 
-    # Weights & Biases logger
+    # update wandb args
     wandb.config.update(args)
 
     update_start_time = time.time()
     # reset environments
-    obs = train_envs.reset()  # obs.shape = (n_envs,C,H,W)
+    obs = train_envs.reset()  # obs.shape = (num_processes,C,H,W)
     # insert initial observation to rollout storage
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
@@ -171,10 +178,16 @@ def main():
     episode_info_buf = deque(maxlen=10)
 
     # calculate number of updates
-    # number of frames ÷ number of policy steps before update ÷ number of cpu processes
+    # number of frames ÷ number of policy steps before update ÷ number of processes
     args.num_batch = args.num_processes * args.policy_num_steps
     args.num_updates = int(args.num_frames) // args.num_batch
-    print("Training beginning")
+
+    # define AUP coefficient
+    if args.use_aup:
+        aup_coef = args.aup_coef_start
+        aup_linear_increase_val = math.exp(math.log(args.aup_coef_end/args.aup_coef_start)/args.num_updates)
+
+    print("Training beginning.")
     print("Number of updates: ", args.num_updates)
     for iter_idx in range(args.num_updates):
         print("Iter: ", iter_idx)
@@ -182,7 +195,10 @@ def main():
         # put actor-critic into train mode
         actor_critic.train()
 
-        # rollout policy to collect num_batch of experience and store in storage
+        if args.use_aup:
+            aup_measures = defaultdict(list)
+
+        # rollout policy to collect num_batch of experience and place in storage
         for step in range(args.policy_num_steps):
 
             # sample actions from policy
@@ -192,6 +208,29 @@ def main():
             # observe rewards and next obs
             obs, reward, done, infos = train_envs.step(action)
 
+            # calculate AUP reward
+            if args.use_aup:
+                intrinsic_reward = torch.zeros_like(reward)
+                with torch.no_grad():
+                    for model in q_aux:
+                        # get action-values
+                        action_values = model.get_action_value(rollouts.obs[step])
+                        # get action-value for action taken
+                        action_value = torch.sum(action_values*torch.nn.functional.one_hot(action, num_classes=train_envs.action_space.n).squeeze(dim=1), dim=1)
+                        # calculate the penalty
+                        intrinsic_reward += torch.abs(action_value.unsqueeze(dim=1) - action_values[:, 4].unsqueeze(dim=1))
+                intrinsic_reward /= args.num_q_aux
+                # add intrinsic reward to the extrinsic reward
+                reward -= aup_coef*intrinsic_reward
+                # log the intrinsic reward from the first env.
+                aup_measures['intrinsic_reward'].append(aup_coef*intrinsic_reward[0, 0])
+                if done[0] and infos[0]['prev_level_complete']==1:
+                    aup_measures['episode_complete'].append(2)
+                elif done[0] and infos[0]['prev_level_complete']==0:
+                    aup_measures['episode_complete'].append(1)
+                else:
+                    aup_measures['episode_complete'].append(0)
+
             # log episode info if episode finished
             for info in infos:
                 if 'episode' in info.keys():
@@ -200,7 +239,7 @@ def main():
             # create mask for episode ends
             masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done]).to(device)
 
-            # add experience to policy buffer
+            # add experience to storage
             rollouts.insert(obs,
                             reward,
                             action,
@@ -209,6 +248,10 @@ def main():
                             masks)
 
             frames += args.num_processes
+
+        # linearly increase aup coefficient after every update
+        if args.use_aup:
+            aup_coef *= aup_linear_increase_val
 
         # --- UPDATE ---
 
@@ -221,10 +264,10 @@ def main():
                                  args.policy_gamma,
                                  args.policy_gae_lambda)
 
-        # update actor-critic using policy gradient algo
+        # update actor-critic using policy training algorithm
         total_loss, value_loss, action_loss, dist_entropy = policy.update(rollouts)
 
-        # clean up after update
+        # clean up storage after update
         rollouts.after_update()
 
         # --- LOGGING ---
@@ -241,10 +284,17 @@ def main():
             num_interval_updates = 1 if iter_idx == 0 else args.log_interval
             fps = num_interval_updates * (args.num_processes * args.policy_num_steps) / (update_end_time - update_start_time)
             update_start_time = update_end_time
-            # Calculates if value function is a good predicator of the returns (ev > 1)
+            # calculates whether the value function is a good predicator of the returns (ev > 1)
             # or if it's just worse than predicting nothing (ev =< 0)
             ev = utl_math.explained_variance(utl.sf01(rollouts.value_preds),
                                              utl.sf01(rollouts.returns))
+
+            if args.use_aup:
+                step = frames - args.num_processes*args.policy_num_steps
+                for i in range(args.policy_num_steps):
+                    wandb.log({'aup/intrinsic_reward': aup_measures['intrinsic_reward'][i],
+                               'aup/episode_complete': aup_measures['episode_complete'][i]}, step=step)
+                    step += args.num_processes
 
             wandb.log({'misc/timesteps': frames,
                        'misc/fps': fps,
@@ -256,23 +306,23 @@ def main():
                        'train/mean_episodic_return': utl_math.safe_mean([episode_info['r'] for episode_info in episode_info_buf]),
                        'train/mean_episodic_length': utl_math.safe_mean([episode_info['l'] for episode_info in episode_info_buf]),
                        'eval/mean_episodic_return': utl_math.safe_mean([episode_info['r'] for episode_info in eval_episode_info_buf]),
-                       'eval/mean_episodic_length': utl_math.safe_mean([episode_info['l'] for episode_info in eval_episode_info_buf])}, step=iter_idx)
+                       'eval/mean_episodic_length': utl_math.safe_mean([episode_info['l'] for episode_info in eval_episode_info_buf])}, step=frames)
 
         # --- SAVE MODEL ---
 
         # save for every interval-th episode or for the last epoch
         if iter_idx !=0 and (iter_idx % args.save_interval == 0 or iter_idx == args.num_updates - 1):
-            print("Saving Actor-Critic Model")
+            print("Saving Actor-Critic Model.")
             torch.save(actor_critic.state_dict(), os.path.join(save_dir, "policy{0}.pt".format(iter_idx)))
 
-    # close environments
+    # close envs
     train_envs.close()
     eval_envs.close()
 
     # --- TEST ---
 
     if args.test:
-        print("Testing beginning")
+        print("Testing beginning.")
         episodic_return = utl_test.test(args=args,
                                         actor_critic=actor_critic,
                                         device=device)

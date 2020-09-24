@@ -91,7 +91,7 @@ def get_args(rest_args=None):
                         help='number of timesteps between saving events (default: 2000).')
 
     # Weights & Biases logging
-    parser.add_argument("--proj_name", type=str, default='ucl_msc_proj',
+    parser.add_argument("--proj_name", type=str, default='aup',
                         help="the name of the project to which this run will belong.")
     parser.add_argument("--run_name", type=str, default=None,
                         help="a display name for this run (default: env_name_time).")

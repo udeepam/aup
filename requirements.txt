@@ -1,4 +1,4 @@
-wandb==0.10.0
+wandb==0.10.2
 numpy==1.18.2
 gym==0.15.7
 procgen==0.10.3

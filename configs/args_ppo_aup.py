@@ -17,8 +17,8 @@ def get_args(rest_args):
                              help='Starting coefficient for AUP.')
     base_parser.add_argument("--aup_coef_end", type=float, default=0.01,
                              help='AUP coefficient will be linearly increased over time.')
-    base_parser.add_argument("--q_aux_dir", type=str, default="q_aux_dir/coinrun",
-                             help='Directory to load the Q_aux model weights from. If --num_q_aux=1 then this is the path to specific weights.')
+    base_parser.add_argument("--q_aux_dir", type=str, default="q_aux_dir/coinrun/",
+                             help='Directory to load the Q_aux model weights from.')
 
     args = base_parser.parse_args(rest_args)
     args.cuda = torch.cuda.is_available()

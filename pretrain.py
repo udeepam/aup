@@ -67,7 +67,7 @@ def main():
     utl.set_global_seed(args.seed, args.deterministic_execution)
 
     # --- OBTAIN DATA FOR TRAINING R_aux ---
-    print("Gathering data for R_aux Model")
+    print("Gathering data for R_aux Model.")
 
     # gather observations for pretraining the auxiliary reward function (CB-VAE)
     envs = make_vec_envs(env_name=args.env_name,
@@ -104,7 +104,7 @@ def main():
 
     # --- TRAIN R_aux (CB-VAE) ---
     # define CB-VAE where the encoder will be used as the auxiliary reward function R_aux
-    print("Training R_aux Model")
+    print("Training R_aux Model.")
 
     # create dataloader for observations gathered
     obs_data = obs_data.reshape(-1, *envs.observation_space.shape)
@@ -122,6 +122,7 @@ def main():
 
     measures = defaultdict(list)
     for epoch in range(args.cb_vae_epochs):
+        print("Epoch: ", epoch)
         start_time = time.time()
         batch_loss = 0
         for indices in sampler:
@@ -144,8 +145,8 @@ def main():
                    'cb_vae/time_taken': time.time()-start_time,
                    'cb_vae/epoch': epoch})
     indices = np.random.randint(0, obs.size(0), args.cb_vae_num_samples**2)
-    measures['true_images'].append(obs[indices].detach())
-    measures['recon_images'].append(recon_batch[indices].detach())
+    measures['true_images'].append(obs[indices].detach().cpu().numpy())
+    measures['recon_images'].append(recon_batch[indices].detach().cpu().numpy())
 
     # plot ground truth images
     plt.rcParams.update({'font.size': 10})
@@ -163,7 +164,7 @@ def main():
 
     # --- TRAIN Q_aux --
     # train PPO agent with value head replaced with action-value head and training on R_aux instead of the environment R
-    print("Training Q_aux Model")
+    print("Training Q_aux Model.")
 
     # initialise environments for training Q_aux
     envs = make_vec_envs(env_name=args.env_name,
@@ -218,7 +219,6 @@ def main():
     # number of frames ÷ number of policy steps before update ÷ number of cpu processes
     args.num_batch = args.num_processes * args.policy_num_steps
     args.num_updates = int(args.num_frames_q_aux) // args.num_batch
-    print("Training Q_aux beginning")
     print("Number of updates: ", args.num_updates)
     for iter_idx in range(args.num_updates):
         print("Iter: ", iter_idx)
@@ -299,7 +299,7 @@ def main():
     envs.close()
 
     # --- SAVE MODEL ---
-    print("Saving Q_aux Model")
+    print("Saving Q_aux Model.")
     torch.save(actor_critic.state_dict(), args.q_aux_path)
 
 
