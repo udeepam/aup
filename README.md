@@ -14,7 +14,7 @@ python main.py --model ppo --env_name coinrun --test True
 
 To train PPO agent with AUP run
 ```bash
-python main.py --model ppo_aup --env_name coinrun --test True
+python main.py --model ppo_aup --env_name coinrun --q_aux_dir q_aux_dir/coinrun/ --test True
 ```
 
 ## Requirements
