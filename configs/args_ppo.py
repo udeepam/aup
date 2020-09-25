@@ -47,6 +47,10 @@ def get_args(rest_args=None):
     parser.add_argument('--num_frame_stack', type=int, default=0,
                         help='number of frames to stack for environments (default: 0).')
 
+    # --- AUP ---
+    parser.add_argument("--use_aup", type=boolean_argument, default=False,
+                        help='Whether to use the auxiliary utility preservation (default: False).')
+
     # --- POLICY ---
 
     # algo

@@ -4,11 +4,6 @@ Based on: https://github.com/rraileanu/auto-drac
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import helpers as utl
-
-
-init_relu_ = lambda m: utl.init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), nn.init.calculate_gain('relu'))
-
 
 def apply_init_(modules):
     """
@@ -113,7 +108,7 @@ class ImpalaCNN(nn.Module):
     num_inputs : `int`
         Number of channels in the input image.
     """
-    def __init__(self, num_inputs, hidden_size=256, channels=[16, 32, 32]):
+    def __init__(self, num_inputs, channels=[16, 32, 32]):
         super(ImpalaCNN, self).__init__()
 
         # define Impala CNN
@@ -122,7 +117,6 @@ class ImpalaCNN(nn.Module):
         self.layer3 = self._make_layer(channels[1], channels[2])
         self.flatten = Flatten()
         self.relu = nn.ReLU()
-        self.fc = init_relu_(nn.Linear(2048, hidden_size))
 
         # initialise all conv modules
         apply_init_(self.modules())
@@ -147,5 +141,4 @@ class ImpalaCNN(nn.Module):
         x = self.layer3(x)
 
         x = self.relu(self.flatten(x))
-        x = self.relu(self.fc(x))
         return x

@@ -10,7 +10,7 @@ def get_args(rest_args):
 
     # --- AUP ---
     base_parser.add_argument("--use_aup", type=boolean_argument, default=True,
-                             help='Whether to use the auxiliary utility preservation (default: False).')
+                             help='Whether to use the auxiliary utility preservation.')
     base_parser.add_argument("--num_q_aux", type=int, default=1,
                              help='The number of Q_aux functions to use.')
     base_parser.add_argument("--aup_coef_start", type=float, default=0.001,

@@ -28,7 +28,11 @@ class QModel(nn.Module):
         self.n_actions = action_space.n
 
         # define feature extractor
-        self.feature_extractor = ImpalaCNN(num_inputs=obs_shape[0], hidden_size=hidden_size)
+        self.feature_extractor = ImpalaCNN(num_inputs=obs_shape[0])
+
+        # define intermediate layer: linear layer
+        self.reg_layer = nn.Sequential(init_relu_(nn.Linear(2048, hidden_size)),
+                                       nn.ReLU(inplace=True))
 
         # define action-value critic model: takes the state and outputs a vector of action-values for each action
         self.critic_linear = init_(nn.Linear(hidden_size, action_space.n))
@@ -46,6 +50,7 @@ class QModel(nn.Module):
 
     def act(self, inputs):
         x = self.feature_extractor(inputs)
+        x = self.reg_layer(x)
         actor_features = self.actor_linear(x)
         action_value = self.critic_linear(x)
         # create action distribution
@@ -60,6 +65,7 @@ class QModel(nn.Module):
 
     def get_value(self, inputs):
         x = self.feature_extractor(inputs)
+        x = self.reg_layer(x)
         actor_features = self.actor_linear(x)
         action_value = self.critic_linear(x)
         # create action distribution
@@ -70,6 +76,7 @@ class QModel(nn.Module):
 
     def evaluate_actions(self, inputs, action):
         x = self.feature_extractor(inputs)
+        x = self.reg_layer(x)
         actor_features = self.actor_linear(x)
         action_value = self.critic_linear(x)
         # create action distribution
@@ -84,5 +91,6 @@ class QModel(nn.Module):
 
     def get_action_value(self, inputs):
         x = self.feature_extractor(inputs)
+        x = self.reg_layer(x)
         action_value = self.critic_linear(x)
         return action_value
