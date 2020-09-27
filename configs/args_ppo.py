@@ -53,6 +53,9 @@ def get_args(rest_args=None):
 
     # --- POLICY ---
 
+    parser.add_argument('--policy_num_steps', type=int, default=256,
+                        help='number of steps of the vectorised env per update (i.e. batch size is n_steps * n_env.')
+
     # algo
     parser.add_argument("--algo", type=str, default='ppo',
                         help='RL algorithm to use.')
@@ -68,8 +71,6 @@ def get_args(rest_args=None):
                         help='factor for trade-off of bias vs variance for generalised advantage estimator (default: 0.95).')
     parser.add_argument('--policy_lr', type=float, default=5e-4,
                         help='learning rate (default: 5e-4).')
-    parser.add_argument('--policy_num_steps', type=int, default=256,
-                        help='number of steps of the vectorised env per update (i.e. batch size is n_steps * n_env.')
     parser.add_argument('--policy_ppo_epoch', type=int, default=3,
                         help='number of training epochs per update for ppo (default: 3).')
     parser.add_argument('--policy_num_mini_batch', type=int, default=8,
